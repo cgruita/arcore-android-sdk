@@ -20,6 +20,7 @@ import android.opengl.GLSurfaceView
 import android.view.View
 import android.widget.ImageButton
 import android.widget.PopupMenu
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -53,6 +54,10 @@ class HelloArView(val activity: HelloArActivity) : DefaultLifecycleObserver {
 
   val snackbarHelper = SnackbarHelper()
   val tapHelper = TapHelper(activity).also { surfaceView.setOnTouchListener(it) }
+
+  val closestLocationText = root.findViewById<TextView>(R.id.closestLocationText)
+  val gpsText = root.findViewById<TextView>(R.id.gpsText)
+  val compassText = root.findViewById<TextView>(R.id.compassText)
 
   override fun onResume(owner: LifecycleOwner) {
     surfaceView.onResume()

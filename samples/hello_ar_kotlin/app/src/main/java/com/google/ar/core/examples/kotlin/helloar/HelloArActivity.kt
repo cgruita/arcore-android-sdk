@@ -2,10 +2,17 @@ package com.google.ar.core.examples.kotlin.helloar
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.hardware.GeomagneticField
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.location.Location
 import android.os.Bundle
 import android.os.Looper
 import android.util.Log
+import android.view.Surface
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -31,8 +38,21 @@ private val knownLocations = listOf(
 
 class HelloArActivity : AppCompatActivity() {
   companion object {
-    private const val TAG = "HelloArActivity"
+    private const val TAG = "TAG"
   }
+
+//  compass
+  private lateinit var sensorManager: SensorManager
+  private var accelerometerReading = FloatArray(3)
+  private var magnetometerReading = FloatArray(3)
+  private var rotationMatrix = FloatArray(9)
+  private var orientationAngles = FloatArray(3)
+  private lateinit var sensorEventListener: SensorEventListener
+
+//  time compass settings
+  private var lastDirection: String? = null
+  private var lastUpdateTime = 0L
+  private val UPDATE_INTERVAL_MS = 5000L // Only update once per second
 
   private lateinit var fusedLocationClient: FusedLocationProviderClient
   private var userLocation: Location? = null
@@ -42,6 +62,10 @@ class HelloArActivity : AppCompatActivity() {
   lateinit var arCoreSessionHelper: ARCoreSessionLifecycleHelper
   lateinit var view: HelloArView
   lateinit var renderer: HelloArRenderer
+
+  private lateinit var closestLocationText: TextView
+  private lateinit var gpsText: TextView
+  private lateinit var compassText: TextView
 
   val instantPlacementSettings = InstantPlacementSettings()
   val depthSettings = DepthSettings()
@@ -70,8 +94,15 @@ class HelloArActivity : AppCompatActivity() {
     lifecycle.addObserver(renderer)
 
     view = HelloArView(this)
+
+
     lifecycle.addObserver(view)
     setContentView(view.root)
+
+    closestLocationText = findViewById(R.id.closestLocationText)
+    gpsText = findViewById(R.id.gpsText)
+    compassText = findViewById(R.id.compassText)
+
 
     SampleRender(view.surfaceView, renderer, assets)
 
@@ -82,7 +113,148 @@ class HelloArActivity : AppCompatActivity() {
     fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
     checkLocationPermission()
+    registerCompassListener()
   }
+
+
+
+  private fun registerCompassListenerOld() {
+    sensorManager = getSystemService(SensorManager::class.java)
+    val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+
+    sensorEventListener = object : SensorEventListener {
+      override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+          accelerometerReading = event.values.clone()
+        } else if (event.sensor.type == Sensor.TYPE_MAGNETIC_FIELD) {
+          magnetometerReading = event.values.clone()
+        }
+
+        if (SensorManager.getRotationMatrix(rotationMatrix, null, accelerometerReading, magnetometerReading)) {
+          SensorManager.getOrientation(rotationMatrix, orientationAngles)
+
+          var azimuthDegrees = Math.toDegrees(orientationAngles[0].toDouble()).toFloat()
+          azimuthDegrees = (azimuthDegrees + 360) % 360 // Normalize to 0-360
+
+          // Apply geomagnetic declination
+          userLocation?.let {
+            val geomagneticField = GeomagneticField(
+              it.latitude.toFloat(),
+              it.longitude.toFloat(),
+              it.altitude.toFloat(),
+              System.currentTimeMillis()
+            )
+            azimuthDegrees -= geomagneticField.declination
+            if (azimuthDegrees < 0) azimuthDegrees += 360
+          }
+
+          val direction = getDirectionFromAzimuth(azimuthDegrees)
+          val currentTime = System.currentTimeMillis()
+
+          // ✅ Only update if 5 seconds have passed OR direction changed
+          if ((currentTime - lastUpdateTime) > UPDATE_INTERVAL_MS || direction != lastDirection) {
+            lastUpdateTime = currentTime
+            lastDirection = direction
+
+            Log.d("COMPASS", "Heading: ${azimuthDegrees.toInt()}° ($direction)")
+
+            runOnUiThread {
+              compassText.text = "Compass: ${azimuthDegrees.toInt()}° ($direction)"
+            }
+          }
+        }
+      }
+
+      override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+
+    sensorManager.registerListener(sensorEventListener, accelerometer, SensorManager.SENSOR_DELAY_UI)
+    sensorManager.registerListener(sensorEventListener, magnetometer, SensorManager.SENSOR_DELAY_UI)
+  }
+
+  private fun registerCompassListener() {
+    sensorManager = getSystemService(SensorManager::class.java)
+    val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+
+    sensorEventListener = object : SensorEventListener {
+      override fun onSensorChanged(event: SensorEvent) {
+        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+          accelerometerReading = event.values.clone()
+        } else if (event.sensor.type == Sensor.TYPE_MAGNETIC_FIELD) {
+          magnetometerReading = event.values.clone()
+        }
+
+        val rotationMatrix = FloatArray(9)
+        val inclinationMatrix = FloatArray(9)
+
+        // ✅ Ensure both sensors have been updated before calculating
+        if (accelerometerReading.isNotEmpty() && magnetometerReading.isNotEmpty()) {
+          val success = SensorManager.getRotationMatrix(rotationMatrix, inclinationMatrix, accelerometerReading, magnetometerReading)
+          if (!success) return
+
+          val remappedRotationMatrix = FloatArray(9)
+          // ✅ Remap for portrait mode (crucial for accuracy)
+          SensorManager.remapCoordinateSystem(rotationMatrix, SensorManager.AXIS_Y, SensorManager.AXIS_Z, remappedRotationMatrix)
+
+          // ✅ Calculate azimuth (yaw)
+          SensorManager.getOrientation(remappedRotationMatrix, orientationAngles)
+          var azimuthDegrees = Math.toDegrees(orientationAngles[0].toDouble()).toFloat()
+
+          // ✅ Apply geomagnetic declination correction
+          userLocation?.let {
+            val geomagneticField = GeomagneticField(
+              it.latitude.toFloat(),
+              it.longitude.toFloat(),
+              it.altitude.toFloat(),
+              System.currentTimeMillis()
+            )
+            azimuthDegrees -= geomagneticField.declination
+          }
+
+          // ✅ Normalize to -180 to 180 scale (East: 90, South: -180, West: -90, North: 0)
+          azimuthDegrees = (azimuthDegrees + 360) % 360
+          if (azimuthDegrees > 180) azimuthDegrees -= 360 // Convert 181-359° to negative values
+
+          val direction = getDirectionFromAzimuth(azimuthDegrees)
+          val currentTime = System.currentTimeMillis()
+
+          // ✅ Log every 5 seconds OR if the direction changes
+          if (direction != lastDirection || (currentTime - lastUpdateTime) > UPDATE_INTERVAL_MS) {
+            lastDirection = direction
+            lastUpdateTime = currentTime
+
+            Log.d("COMPASS", "Heading: ${azimuthDegrees.toInt()}° ($direction)")
+
+            runOnUiThread {
+              compassText.text = "Compass: ${azimuthDegrees.toInt()}° ($direction)"
+            }
+          }
+        }
+      }
+
+      override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+
+    sensorManager.registerListener(sensorEventListener, accelerometer, SensorManager.SENSOR_DELAY_UI)
+    sensorManager.registerListener(sensorEventListener, magnetometer, SensorManager.SENSOR_DELAY_UI)
+  }
+
+  private fun getDirectionFromAzimuth(azimuth: Float): String {
+    return when {
+      azimuth < 22.5 || azimuth >= 337.5 -> "North"
+      azimuth in 22.5..67.5 -> "Northeast"
+      azimuth in 67.5..112.5 -> "East"
+      azimuth in 112.5..157.5 -> "Southeast"
+      azimuth in 157.5..202.5 -> "South"
+      azimuth in 202.5..247.5 -> "Southwest"
+      azimuth in 247.5..292.5 -> "West"
+      azimuth in 292.5..337.5 -> "Northwest"
+      else -> "Unknown"
+    }
+  }
+
 
   private fun checkLocationPermission() {
     if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -113,7 +285,7 @@ class HelloArActivity : AppCompatActivity() {
       override fun onLocationResult(result: LocationResult) {
         result.lastLocation?.let { location ->
           userLocation = location
-          Log.d("TAG", "Updated location: ${location.latitude}, ${location.longitude}")
+          Log.d(TAG, "Updated location: ${location.latitude}, ${location.longitude}")
           checkNearestLocation(location)
         }
       }
@@ -140,13 +312,15 @@ class HelloArActivity : AppCompatActivity() {
     }
 
     if (closestLocation != null) {
-      Log.d("TAG", "Closest location: ${closestLocation.name}, Distance: ${minDistance}m")
+      Log.d(TAG, "Closest location: ${closestLocation.name}, Distance: ${minDistance}m")
 
       // ✅ Fix: Show toast only when location changes
       if (closestLocation.name != lastClosestLocation) {
         lastClosestLocation = closestLocation.name
         runOnUiThread {
-          Toast.makeText(this, "You are near ${closestLocation.name}!", Toast.LENGTH_LONG).show()
+//          Toast.makeText(this, "You are near ${closestLocation.name}!", Toast.LENGTH_LONG).show()
+          gpsText.text = "GPS: ${userLocation.latitude}, ${userLocation.longitude}"
+          closestLocationText.text = "Closest: ${closestLocation.name} (${minDistance.toInt()}m)"
         }
       }
     }
@@ -155,6 +329,11 @@ class HelloArActivity : AppCompatActivity() {
   override fun onDestroy() {
     super.onDestroy()
     fusedLocationClient.removeLocationUpdates(locationCallback)
+
+    //unregister compass listener
+    sensorManager.unregisterListener(sensorEventListener)
+
+
   }
 
   fun configureSession(session: Session) {

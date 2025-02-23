@@ -1,30 +1,17 @@
-<!--
-   Copyright 2021 Google LLC
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-      http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
--->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context="com.google.ar.core.examples.java.helloar.HelloArActivity">
 
+  <!-- AR SurfaceView -->
   <android.opengl.GLSurfaceView
       android:id="@+id/surfaceview"
-      android:layout_width="fill_parent"
-      android:layout_height="fill_parent"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
       android:layout_gravity="top"/>
 
+  <!-- Settings Button (Top Right) -->
   <ImageButton
       android:id="@+id/settings_button"
       android:layout_width="wrap_content"
@@ -35,4 +22,43 @@
       android:src="@drawable/ic_settings"
       android:background="@android:color/transparent"/>
 
+  <!-- UI Panel for Location & Compass (Bottom) -->
+  <LinearLayout
+      android:id="@+id/uiPanel"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="vertical"
+      android:background="#CC000000"
+      android:padding="10dp"
+      android:gravity="center"
+      android:layout_alignParentBottom="true"
+      android:layout_marginBottom="20dp">
+
+    <TextView
+        android:id="@+id/closestLocationText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Nearest Place: Unknown"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:gravity="center"/>
+
+    <TextView
+        android:id="@+id/gpsText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="GPS: Unknown"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:gravity="center"/>
+
+    <TextView
+        android:id="@+id/compassText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Compass: Unknown"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:gravity="center"/>
+  </LinearLayout>
 </RelativeLayout>
