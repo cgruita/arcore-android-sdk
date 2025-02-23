@@ -118,60 +118,7 @@ class HelloArActivity : AppCompatActivity() {
 
 
 
-  private fun registerCompassListenerOld() {
-    sensorManager = getSystemService(SensorManager::class.java)
-    val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-    val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
-    sensorEventListener = object : SensorEventListener {
-      override fun onSensorChanged(event: SensorEvent) {
-        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
-          accelerometerReading = event.values.clone()
-        } else if (event.sensor.type == Sensor.TYPE_MAGNETIC_FIELD) {
-          magnetometerReading = event.values.clone()
-        }
-
-        if (SensorManager.getRotationMatrix(rotationMatrix, null, accelerometerReading, magnetometerReading)) {
-          SensorManager.getOrientation(rotationMatrix, orientationAngles)
-
-          var azimuthDegrees = Math.toDegrees(orientationAngles[0].toDouble()).toFloat()
-          azimuthDegrees = (azimuthDegrees + 360) % 360 // Normalize to 0-360
-
-          // Apply geomagnetic declination
-          userLocation?.let {
-            val geomagneticField = GeomagneticField(
-              it.latitude.toFloat(),
-              it.longitude.toFloat(),
-              it.altitude.toFloat(),
-              System.currentTimeMillis()
-            )
-            azimuthDegrees -= geomagneticField.declination
-            if (azimuthDegrees < 0) azimuthDegrees += 360
-          }
-
-          val direction = getDirectionFromAzimuth(azimuthDegrees)
-          val currentTime = System.currentTimeMillis()
-
-          // ✅ Only update if 5 seconds have passed OR direction changed
-          if ((currentTime - lastUpdateTime) > UPDATE_INTERVAL_MS || direction != lastDirection) {
-            lastUpdateTime = currentTime
-            lastDirection = direction
-
-            Log.d("COMPASS", "Heading: ${azimuthDegrees.toInt()}° ($direction)")
-
-            runOnUiThread {
-              compassText.text = "Compass: ${azimuthDegrees.toInt()}° ($direction)"
-            }
-          }
-        }
-      }
-
-      override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-    }
-
-    sensorManager.registerListener(sensorEventListener, accelerometer, SensorManager.SENSOR_DELAY_UI)
-    sensorManager.registerListener(sensorEventListener, magnetometer, SensorManager.SENSOR_DELAY_UI)
-  }
 
   private fun registerCompassListener() {
     sensorManager = getSystemService(SensorManager::class.java)
@@ -188,21 +135,20 @@ class HelloArActivity : AppCompatActivity() {
 
         val rotationMatrix = FloatArray(9)
         val inclinationMatrix = FloatArray(9)
+        val remappedRotationMatrix = FloatArray(9)
 
-        // ✅ Ensure both sensors have been updated before calculating
         if (accelerometerReading.isNotEmpty() && magnetometerReading.isNotEmpty()) {
           val success = SensorManager.getRotationMatrix(rotationMatrix, inclinationMatrix, accelerometerReading, magnetometerReading)
           if (!success) return
 
-          val remappedRotationMatrix = FloatArray(9)
-          // ✅ Remap for portrait mode (crucial for accuracy)
-          SensorManager.remapCoordinateSystem(rotationMatrix, SensorManager.AXIS_Y, SensorManager.AXIS_Z, remappedRotationMatrix)
+          // ✅ Remap to align with **portrait mode**
+          SensorManager.remapCoordinateSystem(rotationMatrix, SensorManager.AXIS_X, SensorManager.AXIS_Y, remappedRotationMatrix)
 
-          // ✅ Calculate azimuth (yaw)
+          // ✅ Get azimuth from remapped rotation matrix
           SensorManager.getOrientation(remappedRotationMatrix, orientationAngles)
           var azimuthDegrees = Math.toDegrees(orientationAngles[0].toDouble()).toFloat()
 
-          // ✅ Apply geomagnetic declination correction
+          // ✅ Apply geomagnetic declination properly
           userLocation?.let {
             val geomagneticField = GeomagneticField(
               it.latitude.toFloat(),
@@ -213,14 +159,15 @@ class HelloArActivity : AppCompatActivity() {
             azimuthDegrees -= geomagneticField.declination
           }
 
-          // ✅ Normalize to -180 to 180 scale (East: 90, South: -180, West: -90, North: 0)
+          // ✅ Normalize the azimuth:
+          //   - Keep range between **0 to 360** for consistency
+          //   - Ensure North stays **90°**
           azimuthDegrees = (azimuthDegrees + 360) % 360
-          if (azimuthDegrees > 180) azimuthDegrees -= 360 // Convert 181-359° to negative values
 
           val direction = getDirectionFromAzimuth(azimuthDegrees)
           val currentTime = System.currentTimeMillis()
 
-          // ✅ Log every 5 seconds OR if the direction changes
+          // ✅ Only update UI every 5 sec or when direction changes
           if (direction != lastDirection || (currentTime - lastUpdateTime) > UPDATE_INTERVAL_MS) {
             lastDirection = direction
             lastUpdateTime = currentTime
