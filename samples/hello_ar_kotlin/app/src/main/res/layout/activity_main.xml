@@ -35,6 +35,15 @@
       android:layout_marginBottom="20dp">
 
     <TextView
+        android:id="@+id/lookingAtHouseText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Looking at: Unknown"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:gravity="center"/>
+
+    <TextView
         android:id="@+id/closestLocationText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

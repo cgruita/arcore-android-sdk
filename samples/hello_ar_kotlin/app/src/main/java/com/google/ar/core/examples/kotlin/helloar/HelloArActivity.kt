@@ -32,8 +32,10 @@ data class LocationPoint(val name: String, val latitude: Double, val longitude: 
 
 private val knownLocations = listOf(
   LocationPoint("My House", 33.60547247689105, -112.36485413089035),
-  LocationPoint("Bob's Place", 33.605585848613586, -112.36481255665254),
-  LocationPoint("Shari's Place", 33.605317777305, -112.36486351862148)
+  LocationPoint("Bob", 33.605585848613586, -112.36481255665254),
+  LocationPoint("Shari", 33.605317777305, -112.36486351862148),
+  LocationPoint("Adam", 33.60587842427303, -112.36441544869734)
+
 )
 
 class HelloArActivity : AppCompatActivity() {
@@ -66,6 +68,7 @@ class HelloArActivity : AppCompatActivity() {
   private lateinit var closestLocationText: TextView
   private lateinit var gpsText: TextView
   private lateinit var compassText: TextView
+  private lateinit var lookingAtHouseText: TextView
 
   val instantPlacementSettings = InstantPlacementSettings()
   val depthSettings = DepthSettings()
@@ -102,6 +105,7 @@ class HelloArActivity : AppCompatActivity() {
     closestLocationText = findViewById(R.id.closestLocationText)
     gpsText = findViewById(R.id.gpsText)
     compassText = findViewById(R.id.compassText)
+    lookingAtHouseText = findViewById(R.id.lookingAtHouseText)
 
 
     SampleRender(view.surfaceView, renderer, assets)
@@ -118,7 +122,21 @@ class HelloArActivity : AppCompatActivity() {
 
 
 
-
+  private fun onCompassUpdate(userAzimuth: Float) {
+    userLocation?.let { location ->
+      val facingLocation = getFacingLocation(location, userAzimuth)
+      if (facingLocation != null && facingLocation.name != lastClosestLocation) {
+        lastClosestLocation = facingLocation.name
+        runOnUiThread {
+//          Toast.makeText(this, "You're looking at ${facingLocation.name}!", Toast.LENGTH_LONG).show()
+            lookingAtHouseText.text = "Looking at: ${facingLocation.name}"
+        }
+      } else if (facingLocation == null) {
+        lastClosestLocation = null // Reset if no valid location
+        lookingAtHouseText.text = "None"
+      }
+    }
+  }
 
   private fun registerCompassListener() {
     sensorManager = getSystemService(SensorManager::class.java)
@@ -137,18 +155,14 @@ class HelloArActivity : AppCompatActivity() {
         val inclinationMatrix = FloatArray(9)
         val remappedRotationMatrix = FloatArray(9)
 
-        if (accelerometerReading.isNotEmpty() && magnetometerReading.isNotEmpty()) {
-          val success = SensorManager.getRotationMatrix(rotationMatrix, inclinationMatrix, accelerometerReading, magnetometerReading)
-          if (!success) return
-
-          // ✅ Remap to align with **portrait mode**
-          SensorManager.remapCoordinateSystem(rotationMatrix, SensorManager.AXIS_X, SensorManager.AXIS_Y, remappedRotationMatrix)
-
-          // ✅ Get azimuth from remapped rotation matrix
+        if (SensorManager.getRotationMatrix(rotationMatrix, inclinationMatrix, accelerometerReading, magnetometerReading)) {
+          SensorManager.remapCoordinateSystem(rotationMatrix, SensorManager.AXIS_X, SensorManager.AXIS_Z, remappedRotationMatrix)
           SensorManager.getOrientation(remappedRotationMatrix, orientationAngles)
-          var azimuthDegrees = Math.toDegrees(orientationAngles[0].toDouble()).toFloat()
 
-          // ✅ Apply geomagnetic declination properly
+          var azimuthRadians = orientationAngles[0]
+          var azimuthDegrees = Math.toDegrees(azimuthRadians.toDouble()).toFloat()
+
+          // Apply geomagnetic declination correction
           userLocation?.let {
             val geomagneticField = GeomagneticField(
               it.latitude.toFloat(),
@@ -157,26 +171,24 @@ class HelloArActivity : AppCompatActivity() {
               System.currentTimeMillis()
             )
             azimuthDegrees -= geomagneticField.declination
+            if (azimuthDegrees < 0) azimuthDegrees += 360
           }
 
-          // ✅ Normalize the azimuth:
-          //   - Keep range between **0 to 360** for consistency
-          //   - Ensure North stays **90°**
-          azimuthDegrees = (azimuthDegrees + 360) % 360
+          val displayRotation = windowManager.defaultDisplay.rotation
+          when (displayRotation) {
+            Surface.ROTATION_90 -> azimuthDegrees = (azimuthDegrees + 90) % 360
+            Surface.ROTATION_180 -> azimuthDegrees = (azimuthDegrees + 180) % 360
+            Surface.ROTATION_270 -> azimuthDegrees = (azimuthDegrees + 270) % 360
+          }
+
+          // 🔹 Call the method to check if user is looking at a known location
+          onCompassUpdate(azimuthDegrees)
 
           val direction = getDirectionFromAzimuth(azimuthDegrees)
-          val currentTime = System.currentTimeMillis()
+          Log.d("COMPASS", "Heading: ${azimuthDegrees.toInt()}° ($direction)")
 
-          // ✅ Only update UI every 5 sec or when direction changes
-          if (direction != lastDirection || (currentTime - lastUpdateTime) > UPDATE_INTERVAL_MS) {
-            lastDirection = direction
-            lastUpdateTime = currentTime
-
-            Log.d("COMPASS", "Heading: ${azimuthDegrees.toInt()}° ($direction)")
-
-            runOnUiThread {
-              compassText.text = "Compass: ${azimuthDegrees.toInt()}° ($direction)"
-            }
+          runOnUiThread {
+            compassText.text = "Compass: ${azimuthDegrees.toInt()}° ($direction)"
           }
         }
       }
@@ -270,6 +282,43 @@ class HelloArActivity : AppCompatActivity() {
           closestLocationText.text = "Closest: ${closestLocation.name} (${minDistance.toInt()}m)"
         }
       }
+    }
+  }
+
+  private fun getFacingLocation(userLocation: Location, userAzimuth: Float): LocationPoint? {
+    var closestLocation: LocationPoint? = null
+    var minDistance = Float.MAX_VALUE
+
+    for (loc in knownLocations) {
+      val targetLocation = Location("").apply {
+        latitude = loc.latitude
+        longitude = loc.longitude
+      }
+
+      val distance = userLocation.distanceTo(targetLocation) // Distance in meters
+      val bearingToTarget = userLocation.bearingTo(targetLocation) // Azimuth to target (0-360°)
+
+      val azimuthDiff = Math.abs(userAzimuth - bearingToTarget)
+      val normalizedDiff = Math.min(azimuthDiff, 360 - azimuthDiff) // Ensure shortest angle
+
+      if (distance < minDistance && normalizedDiff < 15) {  // ±15 degrees
+        minDistance = distance
+        closestLocation = loc
+
+      }
+    }
+    return closestLocation
+  }
+
+  private fun updateUIForLocation(userLocation: Location, userAzimuth: Float) {
+    val location = getFacingLocation(userLocation, userAzimuth)
+    if (location != null && location.name != lastClosestLocation) {
+      lastClosestLocation = location.name
+      runOnUiThread {
+        Toast.makeText(this, "You're looking at ${location.name}!", Toast.LENGTH_LONG).show()
+      }
+    } else {
+      lastClosestLocation = null  // Hide if not facing a location
     }
   }
 
