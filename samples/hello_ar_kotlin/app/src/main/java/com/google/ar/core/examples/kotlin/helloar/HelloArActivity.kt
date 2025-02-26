@@ -131,87 +131,9 @@ class HelloArActivity : AppCompatActivity() {
     registerCompassListener()
 
 
-    // Wait for AR session initialization
-//    arFragment.arSceneView.scene.addOnUpdateListener {
-//      placeTestSphere() // Place a test sphere
-//    }
   }
 
-  override fun onResume() {
-    super.onResume()
-//    setupARFragment()
 
-  }
-
-  // ✅ Extracted method to load ARFragment
-  private fun loadArFragment() {
-    try {
-      val arFragment = ArFragment()
-      supportFragmentManager.beginTransaction()
-        .replace(R.id.arFragmentContainer, arFragment)
-        .commitAllowingStateLoss()  // ✅ Non-blocking and prevents UI freeze
-    } catch (e: Exception) {
-      Log.e(TAG, "Error initializing ARFragment: ${e.localizedMessage}")
-    }
-  }
-
-  private fun isARCoreInstalled(): Boolean {
-    return try {
-      val availability = ArCoreApk.getInstance().checkAvailability(this)
-      availability.isSupported
-    } catch (e: Exception) {
-      false
-    }
-  }
-
-  private fun setupARFragment() {
-    // Prevent adding multiple instances of the fragment
-    if (supportFragmentManager.findFragmentById(R.id.arFragmentContainer) == null) {
-      arFragment = ArFragment()
-      supportFragmentManager.beginTransaction()
-        .replace(R.id.arFragmentContainer, arFragment)
-        .commitAllowingStateLoss()
-    }
-
-    supportFragmentManager.executePendingTransactions()
-
-    if (::arFragment.isInitialized && arFragment.arSceneView == null) {
-      Log.e(TAG, "AR SceneView failed to initialize!")
-    }
-  }
-
-  private fun placeTestSphere() {
-    val session = arFragment.arSceneView.session ?: return
-    val camera = arFragment.arSceneView.arFrame?.camera ?: return
-
-    // 🚨 Check if ARCore is tracking
-    if (camera.trackingState != com.google.ar.core.TrackingState.TRACKING) {
-      Log.e(TAG, "ARCore is not tracking yet! Waiting...")
-      return
-    }
-
-    // Define a fixed AR position
-    val pose = com.google.ar.core.Pose.makeTranslation(0f, 1.5f, -1f) // 1 meter in front
-    val anchor = session.createAnchor(pose)
-
-    val anchorNode = AnchorNode(anchor)
-    anchorNode.setParent(arFragment.arSceneView.scene)
-
-    addSphereToAnchor(anchorNode, android.graphics.Color.RED) // Add red sphere
-  }
-
-  private fun addSphereToAnchor(anchorNode: AnchorNode, color: Int) {
-    MaterialFactory.makeOpaqueWithColor(
-      this, com.google.ar.sceneform.rendering.Color(Color.RED)
-    ).thenAccept { material ->
-      val sphereRenderable = ShapeFactory.makeSphere(0.2f, Vector3.zero(), material)
-      val sphereNode = Node().apply {
-        renderable = sphereRenderable
-        localPosition = Vector3(0f, 0.5f, 0f) // Slightly above ground
-      }
-      anchorNode.addChild(sphereNode)
-    }
-  }
 
 
   private fun onCompassUpdate(userAzimuth: Float) {

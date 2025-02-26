@@ -15,6 +15,7 @@
  */
 package com.google.ar.core.examples.kotlin.helloar
 
+
 import android.content.res.Resources
 import android.opengl.GLSurfaceView
 import android.view.View
