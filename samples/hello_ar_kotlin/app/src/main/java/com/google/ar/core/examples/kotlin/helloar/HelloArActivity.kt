@@ -19,8 +19,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
+import com.google.ar.core.Anchor
 import com.google.ar.core.ArCoreApk
 import com.google.ar.core.Config
+import com.google.ar.core.Pose
 import com.google.ar.core.Session
 import com.google.ar.core.examples.java.common.helpers.CameraPermissionHelper
 import com.google.ar.core.examples.java.common.helpers.DepthSettings
@@ -81,7 +83,8 @@ class HelloArActivity : AppCompatActivity() {
   val instantPlacementSettings = InstantPlacementSettings()
   val depthSettings = DepthSettings()
 
-  private lateinit var arFragment: ArFragment
+  val colorRed = com.google.ar.sceneform.rendering.Color(Color.RED)
+
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -127,8 +130,17 @@ class HelloArActivity : AppCompatActivity() {
     // ✅ Fix: Initialize fusedLocationClient before using it
     fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
+
+
     checkLocationPermission()
     registerCompassListener()
+
+
+  }
+
+  override fun onResume() {
+    super.onResume()
+    arCoreSessionHelper.session?.resume()
 
 
   }
@@ -136,6 +148,12 @@ class HelloArActivity : AppCompatActivity() {
 
 
 
+
+
+
+
+
+//  compass
   private fun onCompassUpdate(userAzimuth: Float) {
     userLocation?.let { location ->
       val facingLocation = getFacingLocation(location, userAzimuth)
@@ -229,6 +247,8 @@ class HelloArActivity : AppCompatActivity() {
   }
 
 
+//  location
+
   private fun checkLocationPermission() {
     if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
       == PackageManager.PERMISSION_GRANTED
@@ -258,7 +278,7 @@ class HelloArActivity : AppCompatActivity() {
       override fun onLocationResult(result: LocationResult) {
         result.lastLocation?.let { location ->
           userLocation = location
-          Log.d(TAG, "Updated location: ${location.latitude}, ${location.longitude}")
+//          Log.d(TAG, "Updated location: ${location.latitude}, ${location.longitude}")
           checkNearestLocation(location)
         }
       }
@@ -285,7 +305,7 @@ class HelloArActivity : AppCompatActivity() {
     }
 
     if (closestLocation != null) {
-      Log.d(TAG, "Closest location: ${closestLocation.name}, Distance: ${minDistance}m")
+//      Log.d(TAG, "Closest location: ${closestLocation.name}, Distance: ${minDistance}m")
 
       // ✅ Fix: Show toast only when location changes
       if (closestLocation.name != lastClosestLocation) {
