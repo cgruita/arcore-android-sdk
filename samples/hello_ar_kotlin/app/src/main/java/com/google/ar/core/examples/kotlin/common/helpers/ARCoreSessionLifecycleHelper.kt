@@ -16,6 +16,7 @@
 package com.google.ar.core.examples.kotlin.common.helpers
 
 import android.app.Activity
+import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -54,6 +55,7 @@ class ARCoreSessionLifecycleHelper(
    * [`setCameraConfig`](https://developers.google.com/ar/reference/java/com/google/ar/core/Session#setCameraConfig-cameraConfig)
    */
   var beforeSessionResume: ((Session) -> Unit)? = null
+  val TAG = "TAG"
 
   /**
    * Attempts to create a session. If Google Play Services for AR is not installed or not up to
@@ -67,6 +69,7 @@ class ARCoreSessionLifecycleHelper(
   private fun tryCreateSession(): Session? {
     // The app must have been given the CAMERA permission. If we don't have it yet, request it.
     if (!CameraPermissionHelper.hasCameraPermission(activity)) {
+      Log.d(TAG, "ARCoreSession.tryCreateSession: No camera permission")
       CameraPermissionHelper.requestCameraPermission(activity)
       return null
     }
@@ -94,6 +97,7 @@ class ARCoreSessionLifecycleHelper(
 
   override fun onResume(owner: LifecycleOwner) {
     val session = this.session ?: tryCreateSession() ?: return
+    Log.d(TAG, "ARCoreSession.onResume")
     try {
       beforeSessionResume?.invoke(session)
       session.resume()
@@ -105,6 +109,7 @@ class ARCoreSessionLifecycleHelper(
 
   override fun onPause(owner: LifecycleOwner) {
     session?.pause()
+    Log.d(TAG, "ARCoreSession.onPause")
   }
 
   override fun onDestroy(owner: LifecycleOwner) {

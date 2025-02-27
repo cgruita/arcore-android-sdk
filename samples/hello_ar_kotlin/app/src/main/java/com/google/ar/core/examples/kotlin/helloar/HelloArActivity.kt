@@ -61,6 +61,7 @@ class HelloArActivity : AppCompatActivity() {
   private var orientationAngles = FloatArray(3)
   private lateinit var sensorEventListener: SensorEventListener
 
+
 //  time compass settings
   private var lastDirection: String? = null
   private var lastUpdateTime = 0L
@@ -140,9 +141,12 @@ class HelloArActivity : AppCompatActivity() {
 
   override fun onResume() {
     super.onResume()
-    arCoreSessionHelper.session?.resume()
-
-
+    Log.d(TAG, "onResume: ${arCoreSessionHelper.session}")
+//    arCoreSessionHelper.session?.let { session ->
+//      session.resume()
+//      Log.d(TAG, "Renderer.placeSpheres")
+//      renderer.placeSpheres(session) // Place spheres once session is ready
+//    }
   }
 
 
